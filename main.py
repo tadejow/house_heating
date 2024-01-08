@@ -1,10 +1,10 @@
+import utils
 import numpy as np
 import matplotlib.pyplot as plt
 
-from PIL import Image
-
 
 class HeatingModel:
+
     def __init__(self, params):
         # load the model parameters
         self.params = params
@@ -34,6 +34,11 @@ class HeatingModel:
             )
         return self
 
+    def evolve_in_unit_timestep(self, dt):
+        # inside every area
+        for key in self.params["areas"].keys():
+            self.partial_matrix[key][1:-1, 1:-1] = self.partial_matrix[key][:-2, 1:-1]
+
     def build_result_matrix(self):
         for key in self.params["areas"].keys():
             self.result_matrix[
@@ -43,12 +48,7 @@ class HeatingModel:
         return self
 
     def build_image_frame(self):
-        cm = plt.get_cmap("coolwarm")
-        image = Image.fromarray(np.uint8(cm(self.result_matrix / np.max(self.result_matrix))[:, :, :3] * 255))
-        rgb_image = Image.new("RGBA", image.size)
-        rgb_image.paste(image)
-        image = rgb_image
-        del rgb_image
+        image = utils.grayscale_array_to_coolwarm_image(self.result_matrix)
         for key in self.params["walls"].keys():
             for p1 in range(self.params["walls"][key]["row_min"], self.params["walls"][key]["row_max"]):
                 for p2 in range(self.params["walls"][key]["col_min"], self.params["walls"][key]["col_max"]):
