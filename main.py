@@ -34,10 +34,27 @@ class HeatingModel:
             )
         return self
 
-    def evolve_in_unit_timestep(self, dt):
+    def evolve_in_unit_timestep(self, dt, dx):
         # inside every area
+        force_term_full = self.params["force_term"](self.params["domain"])
         for key in self.params["areas"].keys():
-            self.partial_matrix[key][1:-1, 1:-1] = self.partial_matrix[key][:-2, 1:-1]
+            # diffusion effect
+            self.partial_matrix[key][1:-1, 1:-1] = dt * self.params["diffusion_coefficient"] * (
+                self.partial_matrix[key][:-2, 1:-1] + self.partial_matrix[key][2:, 1:-1] +
+                self.partial_matrix[key][1:-1, :-2] + self.partial_matrix[key][1:-1, 2:] -
+                4 * self.partial_matrix[key][1:-1, 1:-1]
+            ) / dx**2
+            # force term effect
+            self.partial_matrix[key] += dt * force_term_full[
+                        self.params["areas"][key]["row_min"]:self.params["areas"][key]["row_max"],
+                        self.params["areas"][key]["col_min"]:self.params["areas"][key]["col_max"]
+            ]
+            # boundaries
+            self.partial_matrix[key][0, :] = self.partial_matrix[key][1, :]
+            self.partial_matrix[key][-1, :] = self.partial_matrix[key][-2, :]
+            self.partial_matrix[key][:, 0] = self.partial_matrix[key][:, 1]
+            self.partial_matrix[key][:, -1] = self.partial_matrix[key][:, -2]
+        return self
 
     def build_result_matrix(self):
         for key in self.params["areas"].keys():
