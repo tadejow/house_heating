@@ -54,12 +54,18 @@ class HeatingModel:
         :return:
         """
         for key in self.params["areas"].keys():
-            self.partial_matrix[key] = np.zeros(
-                (
-                    self.params["areas"][key]["row_max"] - self.params["areas"][key]["row_min"],
-                    self.params["areas"][key]["col_max"] - self.params["areas"][key]["col_min"]
+            if key not in self.partial_matrix.keys():
+                self.partial_matrix[key] = np.zeros(
+                    (
+                        self.params["areas"][key]["row_max"] - self.params["areas"][key]["row_min"],
+                        self.params["areas"][key]["col_max"] - self.params["areas"][key]["col_min"]
+                    )
                 )
-            )
+            else:
+                self.partial_matrix[key] = self.result_matrix[
+                    self.params["areas"][key]["row_min"]: self.params["areas"][key]["row_max"],
+                    self.params["areas"][key]["col_min"]: self.params["areas"][key]["col_max"]
+                ]
         return self
 
     def build_result_matrix(self):
@@ -123,12 +129,27 @@ class HeatingModel:
                 self.params["windows"][key]["row_min"]: self.params["windows"][key]["row_max"],
                 self.params["windows"][key]["col_min"]: self.params["windows"][key]["col_max"]
             ] = self.params["window_temp"](self.params["current_time"])
+            self.build_partial_matrix()
         # TO DO: FIX DOORS UPDATE
         for key in self.params["doors"].keys():
-            self.result_matrix[
-                self.params["doors"][key]["row_min"]: self.params["doors"][key]["row_max"],
-                self.params["doors"][key]["col_min"]: self.params["doors"][key]["col_max"]
-            ] = self.params["window_temp"](self.params["current_time"])
+            if self.params["doors"][key]["row_max"] - self.params["doors"][key]["row_min"] == 0:
+                self.result_matrix[
+                    self.params["doors"][key]["row_min"]: self.params["doors"][key]["row_max"],
+                    self.params["doors"][key]["col_min"]: self.params["doors"][key]["col_max"]
+                ] = np.mean(self.result_matrix[
+                        self.params["doors"][key]["row_min"] - 1: self.params["doors"][key]["row_max"] + 1,
+                        self.params["doors"][key]["col_min"]:self.params["doors"][key]["col_max"]
+                    ], axis=0
+                )
+            else:
+                self.result_matrix[
+                    self.params["doors"][key]["row_min"]: self.params["doors"][key]["row_max"],
+                    self.params["doors"][key]["col_min"]: self.params["doors"][key]["col_max"]
+                ] = np.mean(self.result_matrix[
+                        self.params["doors"][key]["row_min"]: self.params["doors"][key]["row_max"],
+                        self.params["doors"][key]["col_min"] - 1: self.params["doors"][key]["col_max"] + 1
+                    ], axis=0
+                )
         for key in self.params["areas"].keys():
             self.partial_matrix[key] = utils.single_timestep_in_evolution(
                 self.partial_matrix[key], dt, self.params["domain"]["dx"], self.params["diffusion_coefficient"],
@@ -158,6 +179,7 @@ class HeatingModel:
                                     self.params["walls"][key]["col_min"]: self.params["walls"][key]["col_max"]
                                 ], axis=1)
                 ).T
+        self.params["current_time"] += dt   # update current time
         return self
 
     def evolve(self, n_steps: int, dt: float):
@@ -168,7 +190,6 @@ class HeatingModel:
         """
         for _ in tqdm.tqdm(range(n_steps), desc="TIME STEPS"):
             self.evolve_in_unit_timestep(dt)
-            self.params["current_time"] += dt
         self.build_result_matrix()
         return self
 
@@ -252,19 +273,19 @@ if __name__ == '__main__':
         },
         "doors": {
             "D1": {
-                "row_min": 33, "row_max": 33, "col_min": 26, "col_max:": 49
+                "row_min": 33, "row_max": 33, "col_min": 26, "col_max": 49
             },
             "D2": {
-                "row_min": 33, "row_max": 33, "col_min": 26, "col_max:": 49
+                "row_min": 33, "row_max": 33, "col_min": 26, "col_max": 49
             },
             "D3": {
-                "row_min": 33, "row_max": 33, "col_min": 26, "col_max:": 49
+                "row_min": 33, "row_max": 33, "col_min": 26, "col_max": 49
             },
             "D4": {
-                "row_min": 33, "row_max": 33, "col_min": 26, "col_max:": 49
+                "row_min": 33, "row_max": 33, "col_min": 26, "col_max": 49
             },
             "D5": {
-                "row_min": 33, "row_max": 33, "col_min": 26, "col_max:": 49
+                "row_min": 33, "row_max": 33, "col_min": 26, "col_max": 49
             },
         },
         "windows": {
@@ -299,16 +320,16 @@ if __name__ == '__main__':
             "grid": np.meshgrid(np.linspace(-1, 1, 101), np.linspace(-1, 1, 101))[0], "dx": 1
         },
         "force_term": lambda x, t, mask: np.where(
-            mask == 1, (np.sin(t)**2 + 1) * 10**(-2), np.where(
-                mask == 2, (np.sin(t)**2 + 1) * 10**(-2), np.where(
-                    mask == 3, (np.sin(t)**2 + 1) * 10**(-2), np.where(
-                        mask == 4, (np.sin(t)**2 + 1) * 10**(-2), 0
+            mask == 1, (np.sin(t)**2 + 1) * 10**(-1), np.where(
+                mask == 2, (np.sin(t)**2 + 1) * 10**(-1), np.where(
+                    mask == 3, (np.sin(t)**2 + 1) * 10**(-1), np.where(
+                        mask == 4, (np.sin(t)**2 + 1) * 10**(-1), 0
                     )
                 )
             )
         ),
         "window_temp": lambda t: 260 + 5 * np.cos(t),
-        "diffusion_coefficient": 10**(-1),
+        "diffusion_coefficient": 10**(-2),
         "current_time": 0.0
 
     }
@@ -322,7 +343,7 @@ if __name__ == '__main__':
     plt.xticks([])
     plt.yticks([])
     plt.show()
-    model.evolve(30000, 1.0)
+    model.evolve(80000, 1.0)
     model.result_matrix -= 273
     plt.imshow(model.result_matrix, cmap=plt.get_cmap("coolwarm"))
     plt.title(f"t = {round(model.params['current_time'] / 3600, 1)} [h]")
