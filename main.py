@@ -1,3 +1,4 @@
+import json
 import tqdm
 import utils
 import numpy as np
@@ -15,6 +16,23 @@ class HeatingModel:
         self.result_matrix = np.zeros((100, 100))
         # initialize the mask matrix
         self.mask_matrix = np.zeros((100, 100))
+
+    def load_params_from_file(self, fp: str):
+        self.params = json.loads(fp)
+        self.params["force_term"] = utils.str2lambda(self.params["force_term"])
+        self.params["window_temp"] = utils.str2lambda(self.params["window_temp"])
+        for key in self.params["areas"].keys():
+            self.params["areas"][key]["init_func"] = utils.str2lambda(self.params["areas"][key]["init_func"])
+        return self
+
+    def save_params_to_file(self, fp: str):
+        self.params["force_term"] = utils.lambda2str(self.params["force_term"])
+        self.params["window_temp"] = utils.lambda2str(self.params["window_temp"])
+        for key in self.params["areas"].keys():
+            self.params["areas"][key]["init_func"] = utils.lambda2str(self.params["areas"][key]["init_func"])
+        with open(fp, "w") as outfile:
+            json.dump(self.params, outfile)
+        return self
 
     def build_partial_matrix(self):
         for key in self.params["areas"].keys():
