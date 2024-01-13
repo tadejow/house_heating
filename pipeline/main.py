@@ -8,6 +8,9 @@ import matplotlib.pyplot as plt
 class HeatingModel:
 
     def __init__(self, params: dict):
+        """
+        :param params:
+        """
         # load the model parameters
         self.params = params
         # initialize the part domains
@@ -18,6 +21,10 @@ class HeatingModel:
         self.mask_matrix = np.zeros((100, 100))
 
     def load_params_from_file(self, fp: str):
+        """
+        :param fp:
+        :return:
+        """
         self.params = json.loads(fp)
         self.params["force_term"] = utils.str2lambda(self.params["force_term"])
         self.params["window_temp"] = utils.str2lambda(self.params["window_temp"])
@@ -26,8 +33,16 @@ class HeatingModel:
         return self
 
     def save_params_to_file(self, fp: str):
+        """
+        :param fp:
+        :return:
+        """
         self.params["force_term"] = utils.lambda2str(self.params["force_term"])
         self.params["window_temp"] = utils.lambda2str(self.params["window_temp"])
+        self.params["domain"]["a"], self.params["domain"]["b"], self.params["domain"]["N"] = \
+            np.min(self.params["domain"]["grid"]), np.max(self.params["domain"]["grid"]),\
+            self.params["domain"]["grid"].shape[0]
+        self.params["domain"]["grid"] = "placeholder"
         for key in self.params["areas"].keys():
             self.params["areas"][key]["init_func"] = utils.lambda2str(self.params["areas"][key]["init_func"])
         with open(fp, "w") as outfile:
@@ -35,6 +50,9 @@ class HeatingModel:
         return self
 
     def build_partial_matrix(self):
+        """
+        :return:
+        """
         for key in self.params["areas"].keys():
             self.partial_matrix[key] = np.zeros(
                 (
@@ -45,6 +63,9 @@ class HeatingModel:
         return self
 
     def build_result_matrix(self):
+        """
+        :return:
+        """
         for key in self.params["areas"].keys():
             self.result_matrix[
                 self.params["areas"][key]["row_min"]:self.params["areas"][key]["row_max"],
@@ -59,6 +80,9 @@ class HeatingModel:
         return self
 
     def build_image_frame(self):
+        """
+        :return:
+        """
         image = utils.grayscale_array_to_coolwarm_image(self.result_matrix)
         for key in self.params["walls"].keys():
             for p1 in range(self.params["walls"][key]["row_min"], self.params["walls"][key]["row_max"]):
@@ -71,6 +95,9 @@ class HeatingModel:
         return image
 
     def set_initial_data(self):
+        """
+        :return:
+        """
         if "current_time" not in self.params.keys():
             self.params["current_time"] = 0.0
         for key in self.params["areas"].keys():
@@ -84,6 +111,10 @@ class HeatingModel:
         return self
 
     def evolve_in_unit_timestep(self, dt: float):
+        """
+        :param dt:
+        :return:
+        """
         force_term_full = self.params["force_term"](self.params["domain"]["grid"],
                                                     self.params["current_time"],
                                                     self.mask_matrix)
@@ -91,6 +122,12 @@ class HeatingModel:
             self.result_matrix[
                 self.params["windows"][key]["row_min"]: self.params["windows"][key]["row_max"],
                 self.params["windows"][key]["col_min"]: self.params["windows"][key]["col_max"]
+            ] = self.params["window_temp"](self.params["current_time"])
+        # TO DO: FIX DOORS UPDATE
+        for key in self.params["doors"].keys():
+            self.result_matrix[
+                self.params["doors"][key]["row_min"]: self.params["doors"][key]["row_max"],
+                self.params["doors"][key]["col_min"]: self.params["doors"][key]["col_max"]
             ] = self.params["window_temp"](self.params["current_time"])
         for key in self.params["areas"].keys():
             self.partial_matrix[key] = utils.single_timestep_in_evolution(
@@ -108,7 +145,7 @@ class HeatingModel:
                 ] = np.mean(
                     self.result_matrix[
                         self.params["walls"][key]["row_min"]: self.params["walls"][key]["row_max"],
-                        self.params["walls"][key]["col_min"]: self.params["walls"][key]["col_max"]
+                        self.params["walls"][key]["col_min"]:self.params["walls"][key]["col_max"]
                     ], axis=0
                 )
             else:
@@ -124,6 +161,11 @@ class HeatingModel:
         return self
 
     def evolve(self, n_steps: int, dt: float):
+        """
+        :param n_steps:
+        :param dt:
+        :return:
+        """
         for _ in tqdm.tqdm(range(n_steps), desc="TIME STEPS"):
             self.evolve_in_unit_timestep(dt)
             self.params["current_time"] += dt
@@ -159,11 +201,11 @@ if __name__ == '__main__':
                 "init_func": lambda x: 290 + np.random.random(x.shape)
             },
             "A6.2": {
-                "row_min": 55, "row_max": 100, "col_min": 50, "col_max": 60,
+                "row_min": 55, "row_max": 100, "col_min": 50, "col_max": 65,
                 "init_func": lambda x: 290 + np.random.random(x.shape)
             },
             "A7": {
-                "row_min": 55, "row_max": 100, "col_min": 60, "col_max": 100,
+                "row_min": 55, "row_max": 100, "col_min": 65, "col_max": 100,
                 "init_func": lambda x: 275 + np.random.random(x.shape)
             }
         },
@@ -184,7 +226,7 @@ if __name__ == '__main__':
                 "row_min": 0, "row_max": 55, "col_min": 49, "col_max": 51
             },
             "VV6": {
-                "row_min": 26, "row_max": 28, "col_min": 59, "col_max": 100
+                "row_min": 26, "row_max": 28, "col_min": 65, "col_max": 100
             },
             "VV7": {
                 "row_min": 32, "row_max": 34, "col_min": 0, "col_max": 34
@@ -202,11 +244,28 @@ if __name__ == '__main__':
                 "row_min": 65, "row_max": 100, "col_min": 49, "col_max": 51
             },
             "VV12": {
-                "row_min": 55, "row_max": 100, "col_min": 59, "col_max": 61
+                "row_min": 55, "row_max": 100, "col_min": 64, "col_max": 66
             },
             "VV13": {
-                "row_min": 54, "row_max": 56, "col_min": 59, "col_max": 100
+                "row_min": 54, "row_max": 56, "col_min": 65, "col_max": 100
             }
+        },
+        "doors": {
+            "D1": {
+                "row_min": 33, "row_max": 33, "col_min": 26, "col_max:": 49
+            },
+            "D2": {
+                "row_min": 33, "row_max": 33, "col_min": 26, "col_max:": 49
+            },
+            "D3": {
+                "row_min": 33, "row_max": 33, "col_min": 26, "col_max:": 49
+            },
+            "D4": {
+                "row_min": 33, "row_max": 33, "col_min": 26, "col_max:": 49
+            },
+            "D5": {
+                "row_min": 33, "row_max": 33, "col_min": 26, "col_max:": 49
+            },
         },
         "windows": {
             "W1": {
@@ -249,22 +308,28 @@ if __name__ == '__main__':
             )
         ),
         "window_temp": lambda t: 260 + 5 * np.cos(t),
-        "diffusion_coefficient": 10**(-3)
+        "diffusion_coefficient": 10**(-1),
+        "current_time": 0.0
 
     }
     model = HeatingModel(model_parameters)
+    # model.load_params_from_file("../data/params/params_v_01")
     model.build_partial_matrix()
     model.set_initial_data()
-    plt.imshow(model.result_matrix)
-    plt.show()
-    # model.build_image_frame().show()
-    # plt.show()
-    model.evolve(100000, 0.005)
     plt.imshow(model.result_matrix, cmap=plt.get_cmap("coolwarm"))
     plt.title(f"t = {model.params['current_time']}")
     plt.colorbar().set_label("Temperature [K]")
     plt.xticks([])
     plt.yticks([])
     plt.show()
+    model.evolve(30000, 1.0)
+    model.result_matrix -= 273
+    plt.imshow(model.result_matrix, cmap=plt.get_cmap("coolwarm"))
+    plt.title(f"t = {round(model.params['current_time'] / 3600, 1)} [h]")
+    plt.colorbar().set_label("Temperature [C]")
+    plt.xticks([])
+    plt.yticks([])
+    plt.show()
     model.build_image_frame().resize((500, 500)).show()
     plt.show()
+    
