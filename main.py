@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 
 class HeatingModel:
 
-    def __init__(self, params):
+    def __init__(self, params: dict):
         # load the model parameters
         self.params = params
         # initialize the part domains
@@ -24,59 +24,6 @@ class HeatingModel:
                     self.params["areas"][key]["col_max"] - self.params["areas"][key]["col_min"]
                 )
             )
-        return self
-
-    def set_initial_data(self):
-        if "current_time" not in self.params.keys():
-            self.params["current_time"] = 0.0
-        for key in self.params["areas"].keys():
-            self.partial_matrix[key] = self.params["areas"][key]["init_func"](
-                self.params["domain"]["grid"][
-                    self.params["areas"][key]["row_min"]:self.params["areas"][key]["row_max"],
-                    self.params["areas"][key]["col_min"]:self.params["areas"][key]["col_max"]
-                ]
-            )
-        return self
-
-    def evolve_in_unit_timestep(self, dt):
-        force_term_full = self.params["force_term"](self.params["domain"]["grid"],
-                                                    self.params["current_time"],
-                                                    self.mask_matrix)
-        for key in self.params["areas"].keys():
-            self.partial_matrix[key] = utils.single_timestep_in_evolution(
-                self.partial_matrix[key], dt, self.params["domain"]["dx"], self.params["diffusion_coefficient"],
-                force_term_full[
-                    self.params["areas"][key]["row_min"]: self.params["areas"][key]["row_max"],
-                    self.params["areas"][key]["col_min"]: self.params["areas"][key]["col_max"]
-                ]
-            )
-        for key in self.params["walls"].keys():
-            if self.params["walls"][key]["row_max"] - self.params["walls"][key]["row_min"] == 2:
-                self.result_matrix[
-                    self.params["walls"][key]["row_min"]: self.params["walls"][key]["row_max"],
-                    self.params["walls"][key]["col_min"]: self.params["walls"][key]["col_max"]
-                ] = np.mean(
-                    self.result_matrix[
-                        self.params["walls"][key]["row_min"]: self.params["walls"][key]["row_max"],
-                        self.params["walls"][key]["col_min"]: self.params["walls"][key]["col_max"]
-                    ], axis=0
-                )
-            else:
-                self.result_matrix[
-                    self.params["walls"][key]["row_min"]: self.params["walls"][key]["row_max"],
-                    self.params["walls"][key]["col_min"]: self.params["walls"][key]["col_max"]
-                ] = np.mean(
-                    self.result_matrix[
-                        self.params["walls"][key]["row_min"]: self.params["walls"][key]["row_max"],
-                        self.params["walls"][key]["col_min"]: self.params["walls"][key]["col_max"]
-                    ], axis=1
-                )
-        return self
-
-    def evolve(self, n_steps, dt):
-        for _ in tqdm.tqdm(range(n_steps), desc="TIME STEPS"):
-            self.evolve_in_unit_timestep(dt)
-            self.params["current_time"] += dt
         return self
 
     def build_result_matrix(self):
@@ -104,6 +51,61 @@ class HeatingModel:
                 for p2 in range(self.params["windows"][key]["col_min"], self.params["windows"][key]["col_max"]):
                     image.putpixel((p2, p1), (0, 0, 255))
         return image
+
+    def set_initial_data(self):
+        if "current_time" not in self.params.keys():
+            self.params["current_time"] = 0.0
+        for key in self.params["areas"].keys():
+            self.partial_matrix[key] = self.params["areas"][key]["init_func"](
+                self.params["domain"]["grid"][
+                    self.params["areas"][key]["row_min"]:self.params["areas"][key]["row_max"],
+                    self.params["areas"][key]["col_min"]:self.params["areas"][key]["col_max"]
+                ]
+            )
+        self.build_result_matrix()
+        return self
+
+    def evolve_in_unit_timestep(self, dt: float):
+        force_term_full = self.params["force_term"](self.params["domain"]["grid"],
+                                                    self.params["current_time"],
+                                                    self.mask_matrix)
+        for key in self.params["areas"].keys():
+            self.partial_matrix[key] = utils.single_timestep_in_evolution(
+                self.partial_matrix[key], dt, self.params["domain"]["dx"], self.params["diffusion_coefficient"],
+                force_term_full[
+                    self.params["areas"][key]["row_min"]: self.params["areas"][key]["row_max"],
+                    self.params["areas"][key]["col_min"]: self.params["areas"][key]["col_max"]
+                ]
+            )
+        for key in self.params["walls"].keys():
+            if self.params["walls"][key]["row_max"] - self.params["walls"][key]["row_min"] == 2:
+                self.result_matrix[
+                    self.params["walls"][key]["row_min"]: self.params["walls"][key]["row_max"],
+                    self.params["walls"][key]["col_min"]: self.params["walls"][key]["col_max"]
+                ] = np.mean(
+                    self.result_matrix[
+                        self.params["walls"][key]["row_min"]: self.params["walls"][key]["row_max"],
+                        self.params["walls"][key]["col_min"]: self.params["walls"][key]["col_max"]
+                    ], axis=0
+                )
+            else:
+                self.result_matrix[
+                    self.params["walls"][key]["row_min"]: self.params["walls"][key]["row_max"],
+                    self.params["walls"][key]["col_min"]: self.params["walls"][key]["col_max"]
+                ] = np.matrix(
+                        np.mean(self.result_matrix[
+                                    self.params["walls"][key]["row_min"]: self.params["walls"][key]["row_max"],
+                                    self.params["walls"][key]["col_min"]: self.params["walls"][key]["col_max"]
+                                ], axis=1)
+                ).T
+        return self
+
+    def evolve(self, n_steps: int, dt: float):
+        for _ in tqdm.tqdm(range(n_steps), desc="TIME STEPS"):
+            self.evolve_in_unit_timestep(dt)
+            self.params["current_time"] += dt
+        self.build_result_matrix()
+        return self
 
 
 if __name__ == '__main__':
@@ -215,28 +217,27 @@ if __name__ == '__main__':
             "grid": np.meshgrid(np.linspace(-1, 1, 101), np.linspace(-1, 1, 101))[0], "dx": 1
         },
         "force_term": lambda x, t, mask: np.where(
-            mask == 1, (np.cos(t)**2 + 0) * 10**(-1), np.where(
-                mask == 2, (np.cos(t)**2 + 0) * 10**(-1), np.where(
-                    mask == 3, (np.cos(t)**2 + 0) * 10**(-1), np.where(
-                        mask == 4, (np.cos(t)**2 + 0) * 10**(-1), 0
+            mask == 1, (np.cos(t)**2 + 1) * 10**(-1), np.where(
+                mask == 2, (np.cos(t)**2 + 1) * 10**(-1), np.where(
+                    mask == 3, (np.cos(t)**2 + 1) * 10**(-1), np.where(
+                        mask == 4, (np.cos(t)**2 + 1) * 10**(-1), 0
                     )
                 )
             )
-        ) * 10**(-4),
-        "diffusion_coefficient": 10**(-5)
+        ),
+        "diffusion_coefficient": 10**(-3)
 
     }
     model = HeatingModel(model_parameters)
     model.build_partial_matrix()
     model.set_initial_data()
-    model.build_result_matrix()
     plt.imshow(model.result_matrix)
     plt.show()
     # model.build_image_frame().show()
     # plt.show()
-    model.evolve(10, 0.01)
-    model.build_result_matrix()
-    plt.imshow(model.result_matrix)
+    model.evolve(100000, 0.005)
+    plt.imshow(model.result_matrix, cmap=plt.get_cmap("coolwarm"))
+    plt.colorbar()
     plt.show()
     # model.build_image_frame().show()
     # plt.show()
