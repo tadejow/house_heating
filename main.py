@@ -69,6 +69,11 @@ class HeatingModel:
         force_term_full = self.params["force_term"](self.params["domain"]["grid"],
                                                     self.params["current_time"],
                                                     self.mask_matrix)
+        for key in self.params["windows"].keys():
+            self.result_matrix[
+                self.params["windows"][key]["row_min"]: self.params["windows"][key]["row_max"],
+                self.params["windows"][key]["col_min"]: self.params["windows"][key]["col_max"]
+            ] = self.params["window_temp"](self.params["current_time"])
         for key in self.params["areas"].keys():
             self.partial_matrix[key] = utils.single_timestep_in_evolution(
                 self.partial_matrix[key], dt, self.params["domain"]["dx"], self.params["diffusion_coefficient"],
@@ -217,14 +222,15 @@ if __name__ == '__main__':
             "grid": np.meshgrid(np.linspace(-1, 1, 101), np.linspace(-1, 1, 101))[0], "dx": 1
         },
         "force_term": lambda x, t, mask: np.where(
-            mask == 1, (np.cos(t)**2 + 1) * 10**(-1), np.where(
-                mask == 2, (np.cos(t)**2 + 1) * 10**(-1), np.where(
-                    mask == 3, (np.cos(t)**2 + 1) * 10**(-1), np.where(
-                        mask == 4, (np.cos(t)**2 + 1) * 10**(-1), 0
+            mask == 1, (np.sin(t)**2 + 1) * 10**(-2), np.where(
+                mask == 2, (np.sin(t)**2 + 1) * 10**(-2), np.where(
+                    mask == 3, (np.sin(t)**2 + 1) * 10**(-2), np.where(
+                        mask == 4, (np.sin(t)**2 + 1) * 10**(-2), 0
                     )
                 )
             )
         ),
+        "window_temp": lambda t: 260 + 5 * np.cos(t),
         "diffusion_coefficient": 10**(-3)
 
     }
@@ -237,7 +243,10 @@ if __name__ == '__main__':
     # plt.show()
     model.evolve(100000, 0.005)
     plt.imshow(model.result_matrix, cmap=plt.get_cmap("coolwarm"))
-    plt.colorbar()
+    plt.title(f"t = {model.params['current_time']}")
+    plt.colorbar().set_label("Temperature [K]")
+    plt.xticks([])
+    plt.yticks([])
     plt.show()
-    # model.build_image_frame().show()
-    # plt.show()
+    model.build_image_frame().resize((500, 500)).show()
+    plt.show()
