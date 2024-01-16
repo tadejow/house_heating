@@ -19,6 +19,9 @@ class HeatingModel:
         self.result_matrix = np.zeros((100, 100))
         # initialize the mask matrix
         self.mask_matrix = np.zeros((100, 100))
+        # build full and partial matrices
+        self.build_partial_matrix()
+        self.build_result_matrix()
 
     def load_params_from_file(self, fp: str):
         """
@@ -98,6 +101,10 @@ class HeatingModel:
             for p1 in range(self.params["windows"][key]["row_min"], self.params["windows"][key]["row_max"]):
                 for p2 in range(self.params["windows"][key]["col_min"], self.params["windows"][key]["col_max"]):
                     image.putpixel((p2, p1), (0, 0, 255))
+        for key in self.params["doors"].keys():
+            for p1 in range(self.params["doors"][key]["row_min"], self.params["doors"][key]["row_max"]):
+                for p2 in range(self.params["doors"][key]["col_min"], self.params["doors"][key]["col_max"]):
+                    image.putpixel((p2, p1), (150, 75, 0))
         return image
 
     def set_initial_data(self):
@@ -132,12 +139,12 @@ class HeatingModel:
             self.build_partial_matrix()
         # TO DO: FIX DOORS UPDATE
         for key in self.params["doors"].keys():
-            if self.params["doors"][key]["row_max"] - self.params["doors"][key]["row_min"] == 0:
+            if self.params["doors"][key]["row_max"] - self.params["doors"][key]["row_min"] == 2:
                 self.result_matrix[
                     self.params["doors"][key]["row_min"]: self.params["doors"][key]["row_max"],
                     self.params["doors"][key]["col_min"]: self.params["doors"][key]["col_max"]
                 ] = np.mean(self.result_matrix[
-                        self.params["doors"][key]["row_min"] - 1: self.params["doors"][key]["row_max"] + 1,
+                        self.params["doors"][key]["row_min"]: self.params["doors"][key]["row_max"],
                         self.params["doors"][key]["col_min"]:self.params["doors"][key]["col_max"]
                     ], axis=0
                 )
@@ -145,11 +152,12 @@ class HeatingModel:
                 self.result_matrix[
                     self.params["doors"][key]["row_min"]: self.params["doors"][key]["row_max"],
                     self.params["doors"][key]["col_min"]: self.params["doors"][key]["col_max"]
-                ] = np.mean(self.result_matrix[
+                ] = np.matrix(np.mean(self.result_matrix[
                         self.params["doors"][key]["row_min"]: self.params["doors"][key]["row_max"],
-                        self.params["doors"][key]["col_min"] - 1: self.params["doors"][key]["col_max"] + 1
-                    ], axis=0
-                )
+                        self.params["doors"][key]["col_min"]: self.params["doors"][key]["col_max"]
+                    ], axis=1)
+                ).T
+            self.build_partial_matrix()
         for key in self.params["areas"].keys():
             self.partial_matrix[key] = utils.single_timestep_in_evolution(
                 self.partial_matrix[key], dt, self.params["domain"]["dx"], self.params["diffusion_coefficient"],
@@ -158,27 +166,28 @@ class HeatingModel:
                     self.params["areas"][key]["col_min"]: self.params["areas"][key]["col_max"]
                 ]
             )
-        for key in self.params["walls"].keys():
-            if self.params["walls"][key]["row_max"] - self.params["walls"][key]["row_min"] == 2:
-                self.result_matrix[
-                    self.params["walls"][key]["row_min"]: self.params["walls"][key]["row_max"],
-                    self.params["walls"][key]["col_min"]: self.params["walls"][key]["col_max"]
-                ] = np.mean(
-                    self.result_matrix[
-                        self.params["walls"][key]["row_min"]: self.params["walls"][key]["row_max"],
-                        self.params["walls"][key]["col_min"]:self.params["walls"][key]["col_max"]
-                    ], axis=0
-                )
-            else:
-                self.result_matrix[
-                    self.params["walls"][key]["row_min"]: self.params["walls"][key]["row_max"],
-                    self.params["walls"][key]["col_min"]: self.params["walls"][key]["col_max"]
-                ] = np.matrix(
-                        np.mean(self.result_matrix[
-                                    self.params["walls"][key]["row_min"]: self.params["walls"][key]["row_max"],
-                                    self.params["walls"][key]["col_min"]: self.params["walls"][key]["col_max"]
-                                ], axis=1)
-                ).T
+        # for key in self.params["walls"].keys():
+        #     if self.params["walls"][key]["row_max"] - self.params["walls"][key]["row_min"] == 2:
+        #         self.result_matrix[
+        #             self.params["walls"][key]["row_min"]: self.params["walls"][key]["row_max"],
+        #             self.params["walls"][key]["col_min"]: self.params["walls"][key]["col_max"]
+        #         ] = np.mean(
+        #             self.result_matrix[
+        #                 self.params["walls"][key]["row_min"]: self.params["walls"][key]["row_max"],
+        #                 self.params["walls"][key]["col_min"]:self.params["walls"][key]["col_max"]
+        #             ], axis=0
+        #         )
+        #     else:
+        #         self.result_matrix[
+        #             self.params["walls"][key]["row_min"]: self.params["walls"][key]["row_max"],
+        #             self.params["walls"][key]["col_min"]: self.params["walls"][key]["col_max"]
+        #         ] = np.matrix(
+        #                 np.mean(self.result_matrix[
+        #                             self.params["walls"][key]["row_min"]: self.params["walls"][key]["row_max"],
+        #                             self.params["walls"][key]["col_min"]: self.params["walls"][key]["col_max"]
+        #                         ], axis=1)
+        #         ).T
+        #     self.build_partial_matrix()
         self.params["current_time"] += dt   # update current time
         return self
 
@@ -199,35 +208,35 @@ if __name__ == '__main__':
         "areas": {
             "A1": {
                 "row_min": 0, "row_max": 33, "col_min": 0, "col_max": 50,
-                "init_func": lambda x: 285 + np.random.random(x.shape)
+                "init_func": lambda x: 295 + np.random.random(x.shape)
             },
             "A2": {
                 "row_min": 0, "row_max": 27, "col_min": 50, "col_max": 100,
-                "init_func": lambda x: 287 + np.random.random(x.shape)
+                "init_func": lambda x: 298 + np.random.random(x.shape)
             },
             "A3": {
                 "row_min": 27, "row_max": 55, "col_min": 50, "col_max": 100,
-                "init_func": lambda x: 287 + np.random.random(x.shape)
+                "init_func": lambda x: 297 + np.random.random(x.shape)
             },
             "A4": {
                 "row_min": 33, "row_max": 66, "col_min": 0, "col_max": 33,
-                "init_func": lambda x: 291 + np.random.random(x.shape)
+                "init_func": lambda x: 296 + np.random.random(x.shape)
             },
             "A5": {
                 "row_min": 66, "row_max": 100, "col_min": 0, "col_max": 50,
-                "init_func": lambda x: 288 + np.random.random(x.shape)
+                "init_func": lambda x: 298 + np.random.random(x.shape)
             },
             "A6.1": {
                 "row_min": 33, "row_max": 66, "col_min": 33, "col_max": 50,
-                "init_func": lambda x: 290 + np.random.random(x.shape)
+                "init_func": lambda x: 295 + np.random.random(x.shape)
             },
             "A6.2": {
                 "row_min": 55, "row_max": 100, "col_min": 50, "col_max": 65,
-                "init_func": lambda x: 290 + np.random.random(x.shape)
+                "init_func": lambda x: 295 + np.random.random(x.shape)
             },
             "A7": {
                 "row_min": 55, "row_max": 100, "col_min": 65, "col_max": 100,
-                "init_func": lambda x: 275 + np.random.random(x.shape)
+                "init_func": lambda x: 288 + np.random.random(x.shape)
             }
         },
         "walls": {
@@ -247,7 +256,7 @@ if __name__ == '__main__':
                 "row_min": 0, "row_max": 55, "col_min": 49, "col_max": 51
             },
             "VV6": {
-                "row_min": 26, "row_max": 28, "col_min": 65, "col_max": 100
+                "row_min": 26, "row_max": 28, "col_min": 64, "col_max": 100
             },
             "VV7": {
                 "row_min": 32, "row_max": 34, "col_min": 0, "col_max": 34
@@ -268,25 +277,28 @@ if __name__ == '__main__':
                 "row_min": 55, "row_max": 100, "col_min": 64, "col_max": 66
             },
             "VV13": {
-                "row_min": 54, "row_max": 56, "col_min": 65, "col_max": 100
+                "row_min": 54, "row_max": 56, "col_min": 64, "col_max": 100
             }
         },
         "doors": {
             "D1": {
-                "row_min": 33, "row_max": 33, "col_min": 26, "col_max": 49
+                "row_min": 32, "row_max": 34, "col_min": 34, "col_max": 49
             },
             "D2": {
-                "row_min": 33, "row_max": 33, "col_min": 26, "col_max": 49
+                "row_min": 26, "row_max": 28, "col_min": 51, "col_max": 66
             },
             "D3": {
-                "row_min": 33, "row_max": 33, "col_min": 26, "col_max": 49
+                "row_min": 54, "row_max": 56, "col_min": 51, "col_max": 66
             },
             "D4": {
-                "row_min": 33, "row_max": 33, "col_min": 26, "col_max": 49
+                "row_min": 65, "row_max": 67, "col_min": 34, "col_max": 49
             },
             "D5": {
-                "row_min": 33, "row_max": 33, "col_min": 26, "col_max": 49
+                "row_min": 45, "row_max": 55, "col_min": 32, "col_max": 34
             },
+            "D6": {
+                "row_min": 55, "row_max": 65, "col_min": 49, "col_max": 51
+            }
         },
         "windows": {
             "W1": {
@@ -304,7 +316,7 @@ if __name__ == '__main__':
         },
         "radiators": {
             "R1": {
-                "row_min": 2, "row_max": 3, "col_min": 17, "col_max": 33, "mask_value": 1
+                "row_min": 2, "row_max": 3, "col_min": 10, "col_max": 35, "mask_value": 1
             },
             "R2": {
                 "row_min": 2, "row_max": 3, "col_min": 52, "col_max": 66, "mask_value": 2
@@ -313,23 +325,23 @@ if __name__ == '__main__':
                 "row_min": 35, "row_max": 43, "col_min": 30, "col_max": 31, "mask_value": 3
             },
             "R4": {
-                "row_min": 97, "row_max": 98, "col_min": 17, "col_max": 33, "mask_value": 4
+                "row_min": 97, "row_max": 98, "col_min": 10, "col_max": 35, "mask_value": 4
             }
         },
         "domain": {
             "grid": np.meshgrid(np.linspace(-1, 1, 101), np.linspace(-1, 1, 101))[0], "dx": 1
         },
         "force_term": lambda x, t, mask: np.where(
-            mask == 1, (np.sin(t)**2 + 1) * 10**(-1), np.where(
-                mask == 2, (np.sin(t)**2 + 1) * 10**(-1), np.where(
-                    mask == 3, (np.sin(t)**2 + 1) * 10**(-1), np.where(
-                        mask == 4, (np.sin(t)**2 + 1) * 10**(-1), 0
+            mask == 1, (np.sin(24 * t / 3600)**2 + 2) * 10**(-1), np.where(
+                mask == 2, (np.sin(24 * t / 3600)**2 + 1) * 10**(-1), np.where(
+                    mask == 3, (np.sin(24 * t / 3600)**2 + 1) * 10**(-1), np.where(
+                        mask == 4, (np.sin(24 * t / 3600)**2 + 2) * 10**(-1), 0
                     )
                 )
             )
         ),
-        "window_temp": lambda t: 260 + 5 * np.cos(t),
-        "diffusion_coefficient": 10**(-2),
+        "window_temp": lambda t: 280 - 10 * np.sin(24 * t / 3600),
+        "diffusion_coefficient": 0.1,
         "current_time": 0.0
 
     }
@@ -343,7 +355,7 @@ if __name__ == '__main__':
     plt.xticks([])
     plt.yticks([])
     plt.show()
-    model.evolve(80000, 1.0)
+    model.evolve(10000, 0.5)
     model.result_matrix -= 273
     plt.imshow(model.result_matrix, cmap=plt.get_cmap("coolwarm"))
     plt.title(f"t = {round(model.params['current_time'] / 3600, 1)} [h]")
