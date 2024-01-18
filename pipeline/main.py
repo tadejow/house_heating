@@ -136,8 +136,7 @@ class HeatingModel:
                 self.params["windows"][key]["row_min"]: self.params["windows"][key]["row_max"],
                 self.params["windows"][key]["col_min"]: self.params["windows"][key]["col_max"]
             ] = self.params["window_temp"](self.params["current_time"])
-            self.build_partial_matrix()
-        # TO DO: FIX DOORS UPDATE
+        self.build_partial_matrix()
         for key in self.params["doors"].keys():
             if self.params["doors"][key]["row_max"] - self.params["doors"][key]["row_min"] == 2:
                 self.result_matrix[
@@ -157,7 +156,7 @@ class HeatingModel:
                         self.params["doors"][key]["col_min"]: self.params["doors"][key]["col_max"]
                     ], axis=1)
                 ).T
-            self.build_partial_matrix()
+        self.build_partial_matrix()
         for key in self.params["areas"].keys():
             self.partial_matrix[key] = utils.single_timestep_in_evolution(
                 self.partial_matrix[key], dt, self.params["domain"]["dx"], self.params["diffusion_coefficient"],
@@ -166,6 +165,7 @@ class HeatingModel:
                     self.params["areas"][key]["col_min"]: self.params["areas"][key]["col_max"]
                 ]
             )
+        self.build_result_matrix()
         # for key in self.params["walls"].keys():
         #     if self.params["walls"][key]["row_max"] - self.params["walls"][key]["row_min"] == 2:
         #         self.result_matrix[
@@ -199,7 +199,6 @@ class HeatingModel:
         """
         for _ in tqdm.tqdm(range(n_steps), desc="TIME STEPS"):
             self.evolve_in_unit_timestep(dt)
-        self.build_result_matrix()
         return self
 
 
@@ -332,22 +331,21 @@ if __name__ == '__main__':
             "grid": np.meshgrid(np.linspace(-1, 1, 101), np.linspace(-1, 1, 101))[0], "dx": 1
         },
         "force_term": lambda x, t, mask: np.where(
-            mask == 1, (np.sin(24 * t / 3600)**2 + 2) * 10**(-1), np.where(
-                mask == 2, (np.sin(24 * t / 3600)**2 + 1) * 10**(-1), np.where(
-                    mask == 3, (np.sin(24 * t / 3600)**2 + 1) * 10**(-1), np.where(
-                        mask == 4, (np.sin(24 * t / 3600)**2 + 2) * 10**(-1), 0
+            mask == 1, 10**(-1), np.where(
+                mask == 2, 10**(-1), np.where(
+                    mask == 3, 10**(-1), np.where(
+                        mask == 4, 10**(-1), 0
                     )
                 )
             )
         ),
-        "window_temp": lambda t: 280 - 10 * np.sin(24 * t / 3600),
+        "window_temp": lambda t: 280 - 5 * np.sin(24 * t / 3600),
         "diffusion_coefficient": 0.1,
         "current_time": 0.0
 
     }
     model = HeatingModel(model_parameters)
     # model.load_params_from_file("../data/params/params_v_01")
-    model.build_partial_matrix()
     model.set_initial_data()
     plt.imshow(model.result_matrix, cmap=plt.get_cmap("coolwarm"))
     plt.title(f"t = {model.params['current_time']}")
@@ -355,7 +353,7 @@ if __name__ == '__main__':
     plt.xticks([])
     plt.yticks([])
     plt.show()
-    model.evolve(10000, 0.5)
+    model.evolve(1000, 0.5)
     model.result_matrix -= 273
     plt.imshow(model.result_matrix, cmap=plt.get_cmap("coolwarm"))
     plt.title(f"t = {round(model.params['current_time'] / 3600, 1)} [h]")
