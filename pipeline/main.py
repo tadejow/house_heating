@@ -196,6 +196,14 @@ class HeatingModel:
         self.energy_usage = np.cumsum(self.energy_usage)    # compute the cumulative sum of used energy
         return self
 
+    def animate_evolution(self, n_steps: int, dt: float):
+
+        return self
+
+    def plot_evolution(self, n_steps: int, dt: float):
+
+        return self
+
 
 if __name__ == '__main__':
     model_parameters = {
