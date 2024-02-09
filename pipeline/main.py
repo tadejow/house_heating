@@ -19,14 +19,17 @@ class HeatingModel:
         self.result_matrix = np.zeros((100, 100))
         # initialize the mask matrix
         self.mask_matrix = np.zeros((100, 100))
-        # build full and partial matrices
+        # build full and partial matrices and fill them with initial data
         self.build_partial_matrix()
         self.build_result_matrix()
+        self.set_initial_data()
+        # initialize the energy usage list
+        self.energy_usage = []
 
     def load_params_from_file(self, fp: str):
         """
-        :param fp:
-        :return:
+        :param fp: str - filepath
+        :return: loads parameters of the model from the given filepath
         """
         self.params = json.loads(fp)
         self.params["force_term"] = utils.str2lambda(self.params["force_term"])
@@ -37,13 +40,13 @@ class HeatingModel:
 
     def save_params_to_file(self, fp: str):
         """
-        :param fp:
-        :return:
+        :param fp: str - filepath
+        :return: saves parameters of the model to the given filepath
         """
         self.params["force_term"] = utils.lambda2str(self.params["force_term"])
         self.params["window_temp"] = utils.lambda2str(self.params["window_temp"])
         self.params["domain"]["a"], self.params["domain"]["b"], self.params["domain"]["N"] = \
-            np.min(self.params["domain"]["grid"]), np.max(self.params["domain"]["grid"]),\
+            np.min(self.params["domain"]["grid"]), np.max(self.params["domain"]["grid"]), \
             self.params["domain"]["grid"].shape[0]
         self.params["domain"]["grid"] = "placeholder"
         for key in self.params["areas"].keys():
@@ -54,7 +57,7 @@ class HeatingModel:
 
     def build_partial_matrix(self):
         """
-        :return:
+        :return: initializes / builds partial matrices (partitioned result matrix)
         """
         for key in self.params["areas"].keys():
             if key not in self.partial_matrix.keys():
@@ -73,7 +76,7 @@ class HeatingModel:
 
     def build_result_matrix(self):
         """
-        :return:
+        :return: initializes mask matrix and builds the result matrix out of partial matrices
         """
         for key in self.params["areas"].keys():
             self.result_matrix[
@@ -90,7 +93,7 @@ class HeatingModel:
 
     def build_image_frame(self):
         """
-        :return:
+        :return: builds the PIL Image object out of result matrix and marks all inside elements
         """
         image = utils.grayscale_array_to_coolwarm_image(self.result_matrix)
         for key in self.params["walls"].keys():
@@ -109,7 +112,7 @@ class HeatingModel:
 
     def set_initial_data(self):
         """
-        :return:
+        :return: evaluates the initial function on all partial matrices then updating the result matrix
         """
         if "current_time" not in self.params.keys():
             self.params["current_time"] = 0.0
@@ -125,19 +128,39 @@ class HeatingModel:
 
     def evolve_in_unit_timestep(self, dt: float):
         """
-        :param dt:
-        :return:
+        :param dt: float - timestep
+        :return: performs one iteration of finite difference scheme for solving the heat equation
         """
         force_term_full = self.params["force_term"](self.params["domain"]["grid"],
                                                     self.params["current_time"],
                                                     self.mask_matrix)
+        # firstly we set the temperature in the windows
         for key in self.params["windows"].keys():
             self.result_matrix[
                 self.params["windows"][key]["row_min"]: self.params["windows"][key]["row_max"],
                 self.params["windows"][key]["col_min"]: self.params["windows"][key]["col_max"]
             ] = self.params["window_temp"](self.params["current_time"])
         self.build_partial_matrix()
+        # finally we solve the heat equation inside the rooms
+        for key in self.params["areas"].keys():
+            if self.partial_matrix[key].mean() >= self.params["areas"][key]["desired_temp"]:
+                force_term_full[
+                    self.params["areas"][key]["row_min"]: self.params["areas"][key]["row_max"],
+                    self.params["areas"][key]["col_min"]: self.params["areas"][key]["col_max"]
+                ] = 0
+            else:
+                pass
+            self.partial_matrix[key] = utils.single_timestep_in_evolution(
+                self.partial_matrix[key], dt, self.params["domain"]["dx"], self.params["diffusion_coefficient"],
+                force_term_full[
+                    self.params["areas"][key]["row_min"]: self.params["areas"][key]["row_max"],
+                    self.params["areas"][key]["col_min"]: self.params["areas"][key]["col_max"]
+                ]
+            )
+        self.build_result_matrix()
+        # we allow the temperature exchange in the doors
         for key in self.params["doors"].keys():
+            # horizontal doors
             if self.params["doors"][key]["row_max"] - self.params["doors"][key]["row_min"] == 2:
                 self.result_matrix[
                     self.params["doors"][key]["row_min"]: self.params["doors"][key]["row_max"],
@@ -147,6 +170,7 @@ class HeatingModel:
                         self.params["doors"][key]["col_min"]:self.params["doors"][key]["col_max"]
                     ], axis=0
                 )
+            # vertical doors
             else:
                 self.result_matrix[
                     self.params["doors"][key]["row_min"]: self.params["doors"][key]["row_max"],
@@ -157,48 +181,19 @@ class HeatingModel:
                     ], axis=1)
                 ).T
         self.build_partial_matrix()
-        for key in self.params["areas"].keys():
-            self.partial_matrix[key] = utils.single_timestep_in_evolution(
-                self.partial_matrix[key], dt, self.params["domain"]["dx"], self.params["diffusion_coefficient"],
-                force_term_full[
-                    self.params["areas"][key]["row_min"]: self.params["areas"][key]["row_max"],
-                    self.params["areas"][key]["col_min"]: self.params["areas"][key]["col_max"]
-                ]
-            )
-        self.build_result_matrix()
-        # for key in self.params["walls"].keys():
-        #     if self.params["walls"][key]["row_max"] - self.params["walls"][key]["row_min"] == 2:
-        #         self.result_matrix[
-        #             self.params["walls"][key]["row_min"]: self.params["walls"][key]["row_max"],
-        #             self.params["walls"][key]["col_min"]: self.params["walls"][key]["col_max"]
-        #         ] = np.mean(
-        #             self.result_matrix[
-        #                 self.params["walls"][key]["row_min"]: self.params["walls"][key]["row_max"],
-        #                 self.params["walls"][key]["col_min"]:self.params["walls"][key]["col_max"]
-        #             ], axis=0
-        #         )
-        #     else:
-        #         self.result_matrix[
-        #             self.params["walls"][key]["row_min"]: self.params["walls"][key]["row_max"],
-        #             self.params["walls"][key]["col_min"]: self.params["walls"][key]["col_max"]
-        #         ] = np.matrix(
-        #                 np.mean(self.result_matrix[
-        #                             self.params["walls"][key]["row_min"]: self.params["walls"][key]["row_max"],
-        #                             self.params["walls"][key]["col_min"]: self.params["walls"][key]["col_max"]
-        #                         ], axis=1)
-        #         ).T
-        #     self.build_partial_matrix()
+        self.energy_usage.append(force_term_full.sum())     # add energy usage for the timestep to the list
         self.params["current_time"] += dt   # update current time
         return self
 
     def evolve(self, n_steps: int, dt: float):
         """
-        :param n_steps:
-        :param dt:
-        :return:
+        :param n_steps: int - number of timesteps
+        :param dt: float - timestep
+        :return: performs n steps of finite difference scheme for solving the heat equation
         """
         for _ in tqdm.tqdm(range(n_steps), desc="TIME STEPS"):
             self.evolve_in_unit_timestep(dt)
+        self.energy_usage = np.cumsum(self.energy_usage)    # compute the cumulative sum of used energy
         return self
 
 
@@ -207,35 +202,43 @@ if __name__ == '__main__':
         "areas": {
             "A1": {
                 "row_min": 0, "row_max": 33, "col_min": 0, "col_max": 50,
-                "init_func": lambda x: 295 + np.random.random(x.shape)
+                "init_func": lambda x: 295 + np.random.random(x.shape),
+                "desired_temp": 300
             },
             "A2": {
                 "row_min": 0, "row_max": 27, "col_min": 50, "col_max": 100,
-                "init_func": lambda x: 298 + np.random.random(x.shape)
+                "init_func": lambda x: 298 + np.random.random(x.shape),
+                "desired_temp": 300
             },
             "A3": {
                 "row_min": 27, "row_max": 55, "col_min": 50, "col_max": 100,
-                "init_func": lambda x: 297 + np.random.random(x.shape)
+                "init_func": lambda x: 297 + np.random.random(x.shape),
+                "desired_temp": 300
             },
             "A4": {
                 "row_min": 33, "row_max": 66, "col_min": 0, "col_max": 33,
-                "init_func": lambda x: 296 + np.random.random(x.shape)
+                "init_func": lambda x: 296 + np.random.random(x.shape),
+                "desired_temp": 300
             },
             "A5": {
                 "row_min": 66, "row_max": 100, "col_min": 0, "col_max": 50,
-                "init_func": lambda x: 298 + np.random.random(x.shape)
+                "init_func": lambda x: 298 + np.random.random(x.shape),
+                "desired_temp": 300
             },
             "A6.1": {
                 "row_min": 33, "row_max": 66, "col_min": 33, "col_max": 50,
-                "init_func": lambda x: 295 + np.random.random(x.shape)
+                "init_func": lambda x: 295 + np.random.random(x.shape),
+                "desired_temp": 300
             },
             "A6.2": {
                 "row_min": 55, "row_max": 100, "col_min": 50, "col_max": 65,
-                "init_func": lambda x: 295 + np.random.random(x.shape)
+                "init_func": lambda x: 295 + np.random.random(x.shape),
+                "desired_temp": 300
             },
             "A7": {
                 "row_min": 55, "row_max": 100, "col_min": 65, "col_max": 100,
-                "init_func": lambda x: 288 + np.random.random(x.shape)
+                "init_func": lambda x: 288 + np.random.random(x.shape),
+                "desired_temp": 300
             }
         },
         "walls": {
@@ -346,7 +349,6 @@ if __name__ == '__main__':
     }
     model = HeatingModel(model_parameters)
     # model.load_params_from_file("../data/params/params_v_01")
-    model.set_initial_data()
     plt.imshow(model.result_matrix, cmap=plt.get_cmap("coolwarm"))
     plt.title(f"t = {model.params['current_time']}")
     plt.colorbar().set_label("Temperature [K]")
@@ -363,4 +365,5 @@ if __name__ == '__main__':
     plt.show()
     model.build_image_frame().resize((500, 500)).show()
     plt.show()
+
     
