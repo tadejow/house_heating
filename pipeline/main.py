@@ -184,17 +184,14 @@ class HeatingModel:
         self.params["current_time"] += dt   # update current time
         return self
 
-    def evolve(self, n_steps: int, dt: float):
+    def evolve(self, n_steps: int, dt: float, verbose=False):
         """
         :param n_steps: int - number of timesteps
         :param dt: float - timestep
+        :param verbose: bool - False for hiding the progress bar
         :return: performs n steps of finite difference scheme for solving the heat equation
         """
-        for _ in tqdm.tqdm(range(n_steps), desc="TIME STEPS"):
+        for _ in tqdm.tqdm(range(n_steps), desc="TIME STEPS", disable=verbose):
             self.evolve_in_unit_timestep(dt)
-        self.energy_usage = np.cumsum(self.energy_usage)    # compute the cumulative sum of used energy
+        self.energy_usage = np.cumsum(self.energy_usage)    # compute the cumulative sum of used energyk
         return self
-
-
-
-    
