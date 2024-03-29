@@ -193,5 +193,5 @@ class HeatingModel:
         """
         for _ in tqdm.tqdm(range(n_steps), desc="TIME STEPS", disable=verbose):
             self.evolve_in_unit_timestep(dt)
-        self.energy_usage = np.cumsum(self.energy_usage)    # compute the cumulative sum of used energyk
+        self.energy_usage = dt * np.cumsum(self.energy_usage)    # compute the cumulative sum of used energyk
         return self
