@@ -1,0 +1,30 @@
+# Python virtual environment
+# Nigdy nie dodawaj folderu ze środowiskiem wirtualnym do repozytorium!
+venv/
+env/
+.venv/
+.env/
+
+# Python cache i pliki binarne
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Pliki tymczasowe Jupyter Notebook
+.ipynb_checkpoints/
+
+# Pliki generowane przez projekt
+# Ignoruj folder, w którym zapisywane są wykresy, animacje itp.
+results/
+
+# Pliki systemowe (Windows)
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Pliki konfiguracyjne popularnych edytorów
+.idea/
+*.sublime-project
+*.sublime-workspace
